@@ -1,0 +1,136 @@
+use std::collections::HashMap;
+use super::{Key, Value};
+
+pub foo -> &'input str
+    = n:digit s:$([kKmMgG] "b" / "ms") { s }
+
+pub foo2 -> Value
+    = number_bi / number_si / time / float /string
+
+pub section -> &'input str
+    = "section" wsnl "{" wsnl s:word wsnl "}" { s }
+
+pub keyvalues -> Value
+    = kv:keyvalue* { Value::from(kv) }
+
+pub object -> Value
+    = "{" wsnl kvs:keyvalue* wsnl "}" {
+        Value::from(kvs)
+    }
+
+pub keyvalue -> (Key, Value)
+    = keyvalue1 / keyobject
+
+keyvalue1 -> (Key, Value)
+    = wsnl k:key1 ws "=" ws v:value1 ";" wsnl { (Key::from(k), v) }
+
+pub keyobject -> (Key, Value)
+    = wsnl keys:multi_key+ "="? ws v:object wsnl { (Key::from(keys), v) }
+
+multi_key -> String
+    = k:key1 (wsp / &[={]) { k }
+
+keyvalue2 -> (String, Value)
+    = k:key2 ws ":" ws v:value2 { (k, v) }
+
+pub key -> String
+    = key1 / key2
+
+key1 -> String
+    = s:word { s.to_owned() }
+
+key2 -> String
+    = '"' s:$([^"]+) '"' { s.to_owned() }
+
+pub value -> Value
+    = value1 / value2
+
+value1 -> Value
+    = number / time / float / boolean / null / string
+
+value2 -> Value
+    = '"' s:$([^"]*) '"' { Value::from(s) }
+
+string -> Value
+    = string_quoted / string_raw
+
+string_raw -> Value
+    = s:word { Value::from(s) }
+
+string_quoted -> Value
+    = '"' s:word '"' { Value::from(s) }
+
+number -> Value
+    = number_bi / number_si / number_raw
+
+number_raw -> Value
+    = n:digit !char { Value::from(n) }
+
+number_si -> Value
+    = n:digit unit:$([kKmMgG]) !char {
+      Value::from(match unit {
+        "k" | "K" => n * 1_000,
+        "m" | "M" => n * 1_000_000,
+        "g" | "G" => n * 1_000_000_000,
+        _ => panic!()
+      })
+    }
+
+number_bi -> Value
+    = n:digit unit:$([kKmMgG]) "b" !char {
+      Value::from(match unit {
+        "k" | "K" => n * 1_024,
+        "m" | "M" => n * 1_048_576,
+        "g" | "G" => n * 1_073_741_824,
+        _ => panic!()
+      })
+    }
+
+float -> Value
+    = n:decimal !char { Value::from(n) }
+
+time -> Value
+    = n:decimal unit:$("ms" / "s" / "min" / "d" / "w" / "y") !char {
+      Value::from(match unit {
+        "ms" => n / 1000f64,
+        "s" => n,
+        "min" => n * 60f64,
+        "d" => n * 86_400f64,
+        "w" => n * 604_800f64,
+        "y" => n * 31_536_000f64,
+        _ => panic!()
+      })
+    }
+
+digit -> i64
+    = n:$([0-9]+) !"." { n.parse().unwrap() }
+
+decimal -> f64
+    = n:$([0-9]+("." [0-9+])?) { n.parse().unwrap() }
+
+boolean -> Value
+    = true / false
+
+true -> Value
+    = ("true" / "yes" / "on") !char { Value::Boolean(true) }
+
+false -> Value
+    = ("false" / "no" / "off") !char { Value::Boolean(false) }
+
+null -> Value
+    = "null" !char { Value::Null }
+
+word -> &'input str
+    = s:$([a-zA-Z_][a-zA-Z0-9_]*) { s }
+
+char -> ()
+    = [-._a-zA-Z0-9]
+
+wsnl -> ()
+    = [ \n]*
+
+wsp -> ()
+    = " "+
+
+ws -> ()
+    = " "*

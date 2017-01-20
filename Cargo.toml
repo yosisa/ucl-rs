@@ -1,0 +1,10 @@
+[package]
+name = "ucl"
+version = "0.1.0"
+authors = ["Yoshihisa Tanaka <yt.hisa@gmail.com>"]
+build = "build.rs"
+
+[build-dependencies]
+peg = "0.5"
+
+[dependencies]

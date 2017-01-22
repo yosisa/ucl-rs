@@ -98,11 +98,14 @@ impl From<Object> for Value {
     }
 }
 
-// impl From<Vec<(String, Value)>> for Value {
-//     fn from(kvs: Vec<(String, Value)>) -> Self {
-//         Value::Object(object_from_kvs(kvs))
-//     }
-// }
+impl From<Vec<(String, Value)>> for Value {
+    fn from(kvs: Vec<(String, Value)>) -> Self {
+        let kvs = kvs.into_iter()
+            .map(|(k, v)| (Key::from(k), v))
+            .collect();
+        Value::Object(construct_object(kvs))
+    }
+}
 
 // fn object_from_kvs(kvs: Vec<(String, Value)>) -> Object {
 //     let mut m: HashMap<String, Value> = HashMap::new();
@@ -286,6 +289,55 @@ mod tests {
     // }
 
     #[test]
+    fn test_json() {
+        assert!(ucl::jsonValue("100").unwrap() == Value::from(100));
+        assert!(ucl::jsonValue("1.23").unwrap() == Value::from(1.23));
+        assert!(ucl::jsonValue("true").unwrap() == Value::from(true));
+        assert!(ucl::jsonValue("false").unwrap() == Value::from(false));
+        assert!(ucl::jsonValue("null").unwrap() == Value::Null);
+        assert!(ucl::jsonValue(r#""string""#).unwrap() == Value::from("string"));
+
+        let v = ucl::jsonArray(r#"[1, "two", true]"#).unwrap();
+        assert!(v == Value::from(vec![
+            Value::from(1),
+            Value::from("two"),
+            Value::from(true)
+        ]));
+
+        let v = ucl::jsonValue(r#"{
+          "param": "value",
+          "param1": "value1",
+          "param": "value2"
+        }"#).unwrap();
+        assert!(v == Value::from(vec![
+            (Key::from("param"), Value::from(vec![
+                Value::from("value"),
+                Value::from("value2")
+            ])),
+            (Key::from("param1"), Value::from("value1"))
+        ]));
+    }
+
+    #[test]
+    fn test_ucl_array() {
+        assert!(ucl::array("[]").unwrap() == Value::Array(vec![]));
+        assert!(ucl::array(r#"[1, "two", true]"#).unwrap() == Value::from(vec![
+            Value::from(1),
+            Value::from("two"),
+            Value::from(true)
+        ]));
+        assert!(ucl::array(r#"[
+          100,
+          [],
+          [true,false]
+        ]"#).unwrap() == Value::from(vec![
+            Value::from(100),
+            Value::Array(vec![]),
+            Value::from(vec![Value::from(true), Value::from(false)])
+        ]));
+    }
+
+    #[test]
     fn it_works() {
         assert!(ucl::key("foo").unwrap() == "foo".to_owned());
         assert!(ucl::key(r#""foo""#).unwrap() == "foo".to_owned());
@@ -300,8 +352,8 @@ mod tests {
         assert!(ucl::value("false").unwrap() == Value::from(false));
         assert!(ucl::value("null").unwrap() == Value::Null);
 
-        assert!(ucl::keyvalue("param = value;").unwrap() == (Key::from("param"), Value::from("value")));
-        assert!(ucl::keyvalue(r#"section {
+        assert!(ucl::keyValue("param = value;").unwrap() == (Key::from("param"), Value::from("value")));
+        assert!(ucl::keyValue(r#"section {
           param1=value1;
           param2=value2;
         }"#).unwrap() == (Key::from("section"), Value::from(vec![
@@ -309,7 +361,7 @@ mod tests {
             (Key::from("param2"), Value::from("value2"))
         ])));
 
-        ucl::keyobject("foo bar = { foo = bar; }").unwrap();
+        ucl::keyValue("foo bar = { foo = bar; }").unwrap();
 
         assert!(ucl::object("{}").unwrap() == Value::from(HashMap::new()));
         assert!(ucl::object(r#"{
@@ -320,7 +372,7 @@ mod tests {
             (Key::from("param2"), Value::from("value2"))
         ]));
 
-        let complex = ucl::keyvalues(r#"param = value;
+        let complex = ucl::uclKeyValues(r#"param = value;
           section {
             param = value;
             param1 = value1;

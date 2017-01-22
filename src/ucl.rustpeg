@@ -1,27 +1,31 @@
 use super::{Key, Value};
 
-pub keyvalues -> Value
-    = kv:keyvalue* { Value::from(kv) }
+pub ucl -> Value
+    = uclKeyValues / jsonValue
+
+pub uclKeyValues -> Value
+    = kvs:keyValue* { Value::from(kvs) }
+
+pub keyValue -> (Key, Value)
+    = keySimpleValue / keyObjectValue
+
+keySimpleValue -> (Key, Value)
+    = wsnl* k:key ws* "=" ws* v:value ";" wsnl* { (Key::from(k), v) }
+
+keyObjectValue -> (Key, Value)
+    = wsnl* keys:multiKey+ "="? ws* v:object wsnl* { (Key::from(keys), v) }
+
+pub array -> Value
+    = "[" wsnl* vals:arrayItem ** "," wsnl* "]" { Value::from(vals) }
+
+arrayItem -> Value
+    = wsnl* v:(array / object / value) wsnl* { v }
 
 pub object -> Value
-    = "{" wsnl kvs:keyvalue* wsnl "}" {
-        Value::from(kvs)
-    }
-
-pub keyvalue -> (Key, Value)
-    = keyvalue1 / keyobject
-
-keyvalue1 -> (Key, Value)
-    = wsnl k:key ws "=" ws v:value ";" wsnl { (Key::from(k), v) }
-
-pub keyobject -> (Key, Value)
-    = wsnl keys:multiKey+ "="? ws v:object wsnl { (Key::from(keys), v) }
+    = "{" wsnl* kvs:keyValue* wsnl* "}" { Value::from(kvs) }
 
 multiKey -> String
     = k:key (whitespace+ / &[={]) { k }
-
-jsonKeyValue -> (String, Value)
-    = k:doubleQuotedString ws ":" ws v:jsonValue { (k, v) }
 
 pub key -> String
     = doubleQuotedString / rawKeyString
@@ -29,8 +33,23 @@ pub key -> String
 pub value -> Value
     = number / time / float / boolean / null / string
 
-jsonValue -> Value
-    = rawNumber / float / boolean / null / string
+jsonKeyValue -> (String, Value)
+    = k:doubleQuotedString ws* ":" ws* v:jsonValue { (k, v) }
+
+pub jsonValue -> Value
+    = jsonArray / jsonObject / rawNumber / float / boolean / null / string
+
+pub jsonArray -> Value
+    = "[" vals:jsonArrayItem ** "," "]" { Value::from(vals) }
+
+jsonArrayItem -> Value
+    = wsnl* v:jsonValue wsnl* { v }
+
+jsonObject -> Value
+    = "{" kvs:jsonObjectItem ** "," "}" { Value::from(kvs) }
+
+jsonObjectItem -> (String, Value)
+    = wsnl* kv:jsonKeyValue wsnl* { kv }
 
 string -> Value
     = s:(doubleQuotedString / rawString) { Value::from(s) }
@@ -39,10 +58,10 @@ number -> Value
     = binaryPrefixedNumber / siPrefixedNumber / rawNumber
 
 rawNumber -> Value
-    = n:int !rawStringChar { Value::from(n) }
+    = n:int &delim { Value::from(n) }
 
 siPrefixedNumber -> Value
-    = n:int unit:$([kKmMgG]) !rawStringChar {
+    = n:int unit:$([kKmMgG]) &delim {
         Value::from(match unit {
             "k" | "K" => n * 1_000,
             "m" | "M" => n * 1_000_000,
@@ -52,7 +71,7 @@ siPrefixedNumber -> Value
     }
 
 binaryPrefixedNumber -> Value
-    = n:int unit:$([kKmMgG]) "b" !rawStringChar {
+    = n:int unit:$([kKmMgG]) "b" &delim {
         Value::from(match unit {
             "k" | "K" => n * 1_024,
             "m" | "M" => n * 1_048_576,
@@ -62,10 +81,10 @@ binaryPrefixedNumber -> Value
     }
 
 float -> Value
-    = n:decimal !rawStringChar { Value::from(n) }
+    = n:decimal &delim { Value::from(n) }
 
 time -> Value
-    = n:decimal unit:$("ms" / "s" / "min" / "d" / "w" / "y") !rawStringChar {
+    = n:decimal unit:$("ms" / "s" / "min" / "d" / "w" / "y") &delim {
         Value::from(match unit {
             "ms" => n / 1000f64,
             "s" => n,
@@ -81,13 +100,13 @@ boolean -> Value
     = true / false
 
 true -> Value
-    = ("true" / "yes" / "on") !rawStringChar { Value::Boolean(true) }
+    = ("true" / "yes" / "on") &delim { Value::Boolean(true) }
 
 false -> Value
-    = ("false" / "no" / "off") !rawStringChar { Value::Boolean(false) }
+    = ("false" / "no" / "off") &delim { Value::Boolean(false) }
 
 null -> Value
-    = "null" !rawStringChar { Value::Null }
+    = "null" &delim { Value::Null }
 
 int -> i64
     = n:$(digit+) !"." { n.parse().unwrap() }
@@ -98,14 +117,9 @@ decimal -> f64
 word -> &'input str
     = s:$([a-zA-Z_][a-zA-Z0-9_]*) { s }
 
-wsnl -> ()
-    = [ \n]*
+wsnl = whitespace / eol
 
-wsp -> ()
-    = " "+
-
-ws -> ()
-    = " "*
+ws = whitespace
 
 rawKeyString -> String
     = s:(rawKeyChar / escapeSequence)+ { s.into_iter().collect() }
@@ -114,7 +128,7 @@ rawKeyChar -> char
     = !("=" / "\\" / whitespace / eol) c:$(.) { c.chars().next().unwrap() }
 
 rawString -> String
-    = s:(rawStringChar / escapeSequence)+ { s.into_iter().collect() }
+    = !"]" s:(rawStringChar / escapeSequence)+ { s.into_iter().collect() }
 
 rawStringChar -> char
     = !(";" / "\\" / whitespace / eol) c:$(.) { c.chars().next().unwrap() }
@@ -149,3 +163,5 @@ digit = [0-9]
 eol = [\n\r\u{2028}\u{2029}]
 
 whitespace = [ \t\u{00A0}\u{FEFF}\u{1680}\u{180E}\u{2000}-\u{200A}\u{202F}\u{205F}\u{3000}]
+
+delim = whitespace / eol / [;,=}\]] / !.

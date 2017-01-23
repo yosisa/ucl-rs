@@ -1,5 +1,42 @@
 use std::ops::Index;
 use std::collections::HashMap;
+use std::convert::{From, AsRef};
+use std::io::{self, Read};
+use std::fs::File;
+use std::path::Path;
+
+mod ucl {
+    include!(concat!(env!("OUT_DIR"), "/ucl.rs"));
+}
+
+pub use ucl::ParseError;
+
+pub enum UclError {
+    Io(io::Error),
+    Parse(ParseError)
+}
+
+impl From<io::Error> for UclError {
+    fn from(err: io::Error) -> UclError {
+        UclError::Io(err)
+    }
+}
+
+impl From<ParseError> for UclError {
+    fn from(err: ParseError) -> UclError {
+        UclError::Parse(err)
+    }
+}
+
+pub fn parse<T: AsRef<str> + ?Sized>(s: &T) -> Result<Value, ParseError> {
+    ucl::ucl(s.as_ref())
+}
+
+pub fn parse_file<T: AsRef<Path> + ?Sized>(filename: &T) -> Result<Value, UclError> {
+    let mut source = String::new();
+    File::open(filename.as_ref())?.read_to_string(&mut source)?;
+    Ok(parse(&source)?)
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -16,8 +53,26 @@ pub type Array = Vec<Value>;
 pub type Object = HashMap<String, Value>;
 
 impl Value {
-    fn unwrap<T: FromUcl>(&self) -> T {
+    pub fn unwrap<T: FromUcl>(&self) -> T {
         T::from_ucl(self).unwrap()
+    }
+
+    pub fn unwrap_or<T: FromUcl>(&self, def: T) -> T {
+        T::from_ucl(self).unwrap_or(def)
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        match self {
+            &Value::Object(ref v) => v.get(key),
+            _ => None,
+        }
+    }
+
+    pub fn get_or<T: FromUcl>(&self, key: &str, def: T) -> T {
+        match self.get(key) {
+            Some(v) => T::from_ucl(v).unwrap_or(def),
+            None => def,
+        }
     }
 }
 
@@ -38,10 +93,7 @@ impl<'a> Index<&'a str> for Value {
     type Output = Value;
 
     fn index(&self, key: &'a str) -> &Self::Output {
-        match self {
-            &Value::Object(ref v) => v.get(key).unwrap(),
-            _ => panic!()
-        }
+        self.get(key).expect("no entry found for key")
     }
 }
 
@@ -260,10 +312,6 @@ impl FromUcl for Object {
     }
 }
 
-mod ucl {
-    include!(concat!(env!("OUT_DIR"), "/ucl.rs"));
-}
-
 #[cfg(test)]
 mod tests {
     use super::ucl;
@@ -372,7 +420,11 @@ mod tests {
             (Key::from("param2"), Value::from("value2"))
         ]));
 
-        let complex = ucl::uclKeyValues(r#"param = value;
+    }
+
+    #[test]
+    fn test_complex() {
+        let v = parse(r#"param = value;
           section {
             param = value;
             param1 = value1;
@@ -393,7 +445,7 @@ mod tests {
           }
         "#).unwrap();
 
-        assert!(complex == Value::from(vec![
+        assert!(v == Value::from(vec![
             (Key::from("param"), Value::from("value")),
             (Key::from("section"), Value::from(vec![
                 (Key::from("param"), Value::from("value")),
@@ -417,13 +469,16 @@ mod tests {
             ]))
         ]));
 
-        assert!(complex["param"].unwrap::<String>() == "value");
-        assert!(complex["section"]["flag"].unwrap::<bool>() == true);
-        assert!(complex["section"]["subsection"]["host"][1]["port"].unwrap::<i64>() == 901);
-        let hosts: Array = complex["section"]["subsection"]["host"].unwrap();
+        assert!(v["param"].unwrap::<String>() == "value");
+        assert!(v["section"]["flag"].unwrap::<bool>() == true);
+        assert!(v["section"]["subsection"]["host"][1]["port"].unwrap::<i64>() == 901);
+        let hosts: Array = v["section"]["subsection"]["host"].unwrap();
         for i in 0..hosts.len() {
             let port: i64 = hosts[i]["port"].unwrap();
             assert!(port == 900 + i as i64);
         }
+
+        assert!(v.get("non_exist") == None);
+        assert!(v.get_or("non_exist", 0) == 0);
     }
 }

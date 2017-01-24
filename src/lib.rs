@@ -1,5 +1,6 @@
 use std::ops::Index;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::convert::{From, AsRef};
 use std::io::{self, Read};
 use std::fs::File;
@@ -11,6 +12,7 @@ mod ucl {
 
 pub use ucl::ParseError;
 
+#[derive(Debug)]
 pub enum UclError {
     Io(io::Error),
     Parse(ParseError)
@@ -61,9 +63,9 @@ impl Value {
         T::from_ucl(self).unwrap_or(def)
     }
 
-    pub fn get(&self, key: &str) -> Option<&Value> {
+    pub fn get<T: AsRef<str>>(&self, key: T) -> Option<&Value> {
         match self {
-            &Value::Object(ref v) => v.get(key),
+            &Value::Object(ref v) => v.get(key.as_ref()),
             _ => None,
         }
     }
@@ -72,6 +74,23 @@ impl Value {
         match self.get(key) {
             Some(v) => T::from_ucl(v).unwrap_or(def),
             None => def,
+        }
+    }
+
+    fn merge(&mut self, other: Value) {
+        if let Value::Object(other) = other {
+            if let Value::Object(ref mut m) = *self {
+                for (k, v) in other {
+                    match m.entry(k) {
+                        Entry::Occupied(mut o) => o.get_mut().merge(v),
+                        Entry::Vacant(o) => { o.insert(v); },
+                    }
+                }
+            } else {
+                *self = Value::Object(other);
+            }
+        } else {
+            *self = other;
         }
     }
 }
@@ -205,11 +224,14 @@ fn construct_object(kvs: Vec<(Key, Value)>) -> Object {
     }
 
     // Phase 2: multiple keys into multi-dimensional HashMap
-    let mut rv = HashMap::new();
+    let mut rv: HashMap<String, Value> = HashMap::new();
     for (k, v) in m {
         match k {
             Key::Single(key) => {
-                rv.insert(key, v);
+                match rv.entry(key) {
+                    Entry::Occupied(mut o) => o.get_mut().merge(v),
+                    Entry::Vacant(o) => { o.insert(v); },
+                }
             },
             Key::Multiple(keys) => {
                 let mut iter = keys.into_iter().rev();
@@ -219,7 +241,11 @@ fn construct_object(kvs: Vec<(Key, Value)>) -> Object {
                     value = Value::Object([(key, value)].iter().cloned().collect());
                     key = k;
                 }
-                rv.insert(key, value);
+
+                match rv.entry(key) {
+                    Entry::Occupied(mut o) => o.get_mut().merge(value),
+                    Entry::Vacant(o) => { o.insert(value); },
+                }
             },
         }
     }
@@ -333,20 +359,20 @@ mod tests {
     //         ])),
     //         ("param1".to_owned(), Value::from("value1"))
     //     ].iter().cloned().collect();
-    //     assert!(m == expect);
+    //     assert_eq!(m, expect);
     // }
 
     #[test]
     fn test_json() {
-        assert!(ucl::jsonValue("100").unwrap() == Value::from(100));
-        assert!(ucl::jsonValue("1.23").unwrap() == Value::from(1.23));
-        assert!(ucl::jsonValue("true").unwrap() == Value::from(true));
-        assert!(ucl::jsonValue("false").unwrap() == Value::from(false));
-        assert!(ucl::jsonValue("null").unwrap() == Value::Null);
-        assert!(ucl::jsonValue(r#""string""#).unwrap() == Value::from("string"));
+        assert_eq!(ucl::jsonValue("100").unwrap(), Value::from(100));
+        assert_eq!(ucl::jsonValue("1.23").unwrap(), Value::from(1.23));
+        assert_eq!(ucl::jsonValue("true").unwrap(), Value::from(true));
+        assert_eq!(ucl::jsonValue("false").unwrap(), Value::from(false));
+        assert_eq!(ucl::jsonValue("null").unwrap(), Value::Null);
+        assert_eq!(ucl::jsonValue(r#""string""#).unwrap(), Value::from("string"));
 
         let v = ucl::jsonArray(r#"[1, "two", true]"#).unwrap();
-        assert!(v == Value::from(vec![
+        assert_eq!(v, Value::from(vec![
             Value::from(1),
             Value::from("two"),
             Value::from(true)
@@ -357,7 +383,7 @@ mod tests {
           "param1": "value1",
           "param": "value2"
         }"#).unwrap();
-        assert!(v == Value::from(vec![
+        assert_eq!(v, Value::from(vec![
             (Key::from("param"), Value::from(vec![
                 Value::from("value"),
                 Value::from("value2")
@@ -368,54 +394,98 @@ mod tests {
 
     #[test]
     fn test_ucl_array() {
-        assert!(ucl::array("[]").unwrap() == Value::Array(vec![]));
-        assert!(ucl::array(r#"[1, "two", true]"#).unwrap() == Value::from(vec![
+        assert_eq!(ucl::array("[]").unwrap(), Value::Array(vec![]));
+        assert_eq!(ucl::array(r#"[1, "two", true]"#).unwrap(), Value::from(vec![
             Value::from(1),
             Value::from("two"),
             Value::from(true)
         ]));
-        assert!(ucl::array(r#"[
+        assert_eq!(ucl::array(r#"[
           100,
           [],
           [true,false]
-        ]"#).unwrap() == Value::from(vec![
+        ]"#).unwrap(), Value::from(vec![
             Value::from(100),
             Value::Array(vec![]),
             Value::from(vec![Value::from(true), Value::from(false)])
+        ]));
+        assert_eq!(ucl::array("[.foo, .bar]").unwrap(), Value::from(vec![
+            Value::from(".foo"),
+            Value::from(".bar")
+        ]));
+        assert_eq!(ucl::array("[{},{}]").unwrap(), Value::from(vec![
+            Value::Object(HashMap::new()),
+            Value::Object(HashMap::new())]
+        ));
+        assert_eq!(ucl::keyValue(r#"object_array = [{
+          index = 1;
+          value = foo;
+        }, {
+          index = 2;
+          value = bar;
+        }];"#).unwrap(), (Key::from("object_array"), Value::from(vec![
+            Value::from(vec![
+                (Key::from("index"), Value::from(1)),
+                (Key::from("value"), Value::from("foo"))
+            ]),
+            Value::from(vec![
+                (Key::from("index"), Value::from(2)),
+                (Key::from("value"), Value::from("bar"))
+            ])
+        ])));
+    }
+
+    #[test]
+    fn test_ucl_object() {
+        assert_eq!(parse(r#"obj a {
+          name = A;
+        }
+
+        obj b {
+          name = B;
+        }"#).unwrap(), Value::from(vec![
+            (Key::from("obj"), Value::from(vec![
+                (Key::from("a"), Value::from(vec![
+                    (Key::from("name"), Value::from("A"))
+                ])),
+                (Key::from("b"), Value::from(vec![
+                    (Key::from("name"), Value::from("B"))
+                ]))
+            ]))
         ]));
     }
 
     #[test]
     fn it_works() {
-        assert!(ucl::key("foo").unwrap() == "foo".to_owned());
-        assert!(ucl::key(r#""foo""#).unwrap() == "foo".to_owned());
+        assert_eq!(ucl::key("foo").unwrap(), "foo".to_owned());
+        assert_eq!(ucl::key(r#""foo""#).unwrap(), "foo".to_owned());
 
-        assert!(ucl::value("foo").unwrap() == Value::from("foo"));
-        assert!(ucl::value(r#""foo""#).unwrap() == Value::from("foo"));
-        assert!(ucl::value("100").unwrap() == Value::from(100));
-        assert!(ucl::value("1k").unwrap() == Value::from(1000));
-        assert!(ucl::value("1kb").unwrap() == Value::from(1024));
-        assert!(ucl::value("10ms").unwrap() == Value::from(0.01));
-        assert!(ucl::value("true").unwrap() == Value::from(true));
-        assert!(ucl::value("false").unwrap() == Value::from(false));
-        assert!(ucl::value("null").unwrap() == Value::Null);
+        assert_eq!(ucl::value("foo").unwrap(), Value::from("foo"));
+        assert_eq!(ucl::value(r#""foo""#).unwrap(), Value::from("foo"));
+        assert_eq!(ucl::value("100").unwrap(), Value::from(100));
+        assert_eq!(ucl::value("1k").unwrap(), Value::from(1000));
+        assert_eq!(ucl::value("1kb").unwrap(), Value::from(1024));
+        assert_eq!(ucl::value("10ms").unwrap(), Value::from(0.01));
+        assert_eq!(ucl::value("true").unwrap(), Value::from(true));
+        assert_eq!(ucl::value("false").unwrap(), Value::from(false));
+        assert_eq!(ucl::value("null").unwrap(), Value::Null);
 
-        assert!(ucl::keyValue("param = value;").unwrap() == (Key::from("param"), Value::from("value")));
-        assert!(ucl::keyValue(r#"section {
+        assert_eq!(ucl::keyValue("param = value;").unwrap(), (Key::from("param"), Value::from("value")));
+        assert_eq!(ucl::keyValue(r#"section {
           param1=value1;
           param2=value2;
-        }"#).unwrap() == (Key::from("section"), Value::from(vec![
+        }"#).unwrap(), (Key::from("section"), Value::from(vec![
             (Key::from("param1"), Value::from("value1")),
             (Key::from("param2"), Value::from("value2"))
         ])));
 
         ucl::keyValue("foo bar = { foo = bar; }").unwrap();
 
-        assert!(ucl::object("{}").unwrap() == Value::from(HashMap::new()));
-        assert!(ucl::object(r#"{
+        assert_eq!(ucl::object("{}").unwrap(), Value::from(HashMap::new()));
+        assert_eq!(ucl::object(r#"{
           param1=value1;
           param2=value2;
-        }"#).unwrap() == Value::from(vec![
+        }"#).unwrap(), Value::from(vec![
             (Key::from("param1"), Value::from("value1")),
             (Key::from("param2"), Value::from("value2"))
         ]));
@@ -445,7 +515,7 @@ mod tests {
           }
         "#).unwrap();
 
-        assert!(v == Value::from(vec![
+        assert_eq!(v, Value::from(vec![
             (Key::from("param"), Value::from("value")),
             (Key::from("section"), Value::from(vec![
                 (Key::from("param"), Value::from("value")),
@@ -469,16 +539,16 @@ mod tests {
             ]))
         ]));
 
-        assert!(v["param"].unwrap::<String>() == "value");
-        assert!(v["section"]["flag"].unwrap::<bool>() == true);
-        assert!(v["section"]["subsection"]["host"][1]["port"].unwrap::<i64>() == 901);
+        assert_eq!(v["param"].unwrap::<String>(), "value");
+        assert_eq!(v["section"]["flag"].unwrap::<bool>(), true);
+        assert_eq!(v["section"]["subsection"]["host"][1]["port"].unwrap::<i64>(), 901);
         let hosts: Array = v["section"]["subsection"]["host"].unwrap();
         for i in 0..hosts.len() {
             let port: i64 = hosts[i]["port"].unwrap();
-            assert!(port == 900 + i as i64);
+            assert_eq!(port, 900 + i as i64);
         }
 
-        assert!(v.get("non_exist") == None);
-        assert!(v.get_or("non_exist", 0) == 0);
+        assert_eq!(v.get("non_exist"), None);
+        assert_eq!(v.get_or("non_exist", 0), 0);
     }
 }

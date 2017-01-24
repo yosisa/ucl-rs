@@ -1,0 +1,45 @@
+# This is a example ucl.
+version=1.0;
+
+/* Multi-line comment here
+this_should_not_appear = yes;
+/* Nested multi-line and # single-line comment also allowed
+ */
+this_must_appear = yes; # comment until end of the line.
+
+general {
+    user = nobody;
+    daemon = true;
+    fork = 4;
+}
+
+site {
+    log_rotate = 7d;
+    bind = [
+       :80,
+       :443
+    ];
+}
+
+site api { # For api
+    timeout = 1s;
+    max_recv_size = 25mb;
+    permissions = [{
+        user = root;
+        role = admin;
+    }, {
+        user = guest;
+        role = "";
+    }];
+    /* upstream = api1.example.com; */
+}
+
+site "www" = { /* For www */
+    base_dir = "/var/www";
+    timeout = 100ms;
+    index = index.html;
+    index = index.htm;
+    file_types = [.html,.css, .js];
+}
+
+# Ucl ends here.

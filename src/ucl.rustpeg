@@ -7,28 +7,28 @@ pub uclKeyValues -> Value
     = kvs:keyValue* { Value::from(kvs) }
 
 pub keyValue -> (Key, Value)
-    = keySimpleValue / keyObjectValue
+    = __ kv:(keySimpleValue / keyObjectValue) __ { kv }
 
 keySimpleValue -> (Key, Value)
-    = wsnl* k:key ws* "=" ws* v:value ";" wsnl* { (Key::from(k), v) }
+    = k:key ws* "=" ws* v:(array / value) ";" { (Key::from(k), v) }
 
 keyObjectValue -> (Key, Value)
-    = wsnl* keys:multiKey+ "="? ws* v:object wsnl* { (Key::from(keys), v) }
+    = keys:multiKey+ "="? ws* v:object { (Key::from(keys), v) }
 
 pub array -> Value
-    = "[" wsnl* vals:arrayItem ** "," wsnl* "]" { Value::from(vals) }
+    = "[" __ vals:arrayItem ** "," __ "]" { Value::from(vals) }
 
 arrayItem -> Value
-    = wsnl* v:(array / object / value) wsnl* { v }
+    = __ v:(array / object / value) __ { v }
 
 pub object -> Value
-    = "{" wsnl* kvs:keyValue* wsnl* "}" { Value::from(kvs) }
+    = "{" __ kvs:keyValue* __ "}" { Value::from(kvs) }
 
 multiKey -> String
     = k:key (whitespace+ / &[={]) { k }
 
 pub key -> String
-    = doubleQuotedString / rawKeyString
+    = doubleQuotedString / rawString
 
 pub value -> Value
     = number / time / float / boolean / null / string
@@ -117,21 +117,17 @@ decimal -> f64
 word -> &'input str
     = s:$([a-zA-Z_][a-zA-Z0-9_]*) { s }
 
+__ = (comment / whitespace / eol)*
+
 wsnl = whitespace / eol
 
 ws = whitespace
 
-rawKeyString -> String
-    = s:(rawKeyChar / escapeSequence)+ { s.into_iter().collect() }
-
-rawKeyChar -> char
-    = !("=" / "\\" / whitespace / eol) c:$(.) { c.chars().next().unwrap() }
-
 rawString -> String
-    = !"]" s:(rawStringChar / escapeSequence)+ { s.into_iter().collect() }
+    = s:(rawStringChar / escapeSequence)+ { s.into_iter().collect() }
 
 rawStringChar -> char
-    = !(";" / "\\" / whitespace / eol) c:$(.) { c.chars().next().unwrap() }
+    = !(delim / "\\") c:$(.) { c.chars().next().unwrap() }
 
 doubleQuotedString -> String
     = '"' s:doubleQuotedChar* '"' { s.into_iter().collect() }
@@ -164,4 +160,4 @@ eol = [\n\r\u{2028}\u{2029}]
 
 whitespace = [ \t\u{00A0}\u{FEFF}\u{1680}\u{180E}\u{2000}-\u{200A}\u{202F}\u{205F}\u{3000}]
 
-delim = whitespace / eol / [;,=}\]] / !.
+delim = whitespace / eol / [;,={}\[\]] / !.

@@ -42,4 +42,11 @@ site "www" = { /* For www */
     file_types = [.html,.css, .js];
 }
 
+500_html = <<EOD
+<h1>500 Internal Server Error</h1>
+
+<p>Please contact to ...<at>...</p>
+EOD
+;
+
 # Ucl ends here.

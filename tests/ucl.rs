@@ -32,4 +32,6 @@ fn test_parse_file() {
     assert_eq!(cfg["site"]["www"]["file_types"][0].unwrap::<String>(), ".html".to_owned());
     assert_eq!(cfg["site"]["www"]["file_types"][1].unwrap::<String>(), ".css".to_owned());
     assert_eq!(cfg["site"]["www"]["file_types"][2].unwrap::<String>(), ".js".to_owned());
+
+    assert_eq!(cfg["500_html"].unwrap::<String>(), "<h1>500 Internal Server Error</h1>\n\n<p>Please contact to ...<at>...</p>");
 }

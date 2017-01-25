@@ -7,6 +7,10 @@ use std::fs::File;
 use std::path::Path;
 
 mod ucl {
+    use std::cell::RefCell;
+
+    thread_local!(static TERMINATOR: RefCell<Option<String>> = RefCell::new(None));
+
     include!(concat!(env!("OUT_DIR"), "/ucl.rs"));
 }
 
@@ -490,6 +494,38 @@ mod tests {
             (Key::from("param2"), Value::from("value2"))
         ]));
 
+    }
+
+    #[test]
+    fn test_ucl_multiline_string() {
+        assert_eq!(ucl::multiLineString(r#"<<EOD
+EOD
+"#).unwrap(), "");
+
+        assert_eq!(ucl::multiLineString(r#"<<EOD
+foo
+EOF
+EOD
+"#).unwrap(), "foo\nEOF");
+        assert_eq!(ucl::multiLineString(r#"<<EOS
+
+some
+text
+
+EOS
+"#).unwrap(), "\nsome\ntext\n");
+        assert_eq!(parse(r#"s1 = <<EOS
+some
+text
+EOS
+;
+                            s2 = <<EOD
+EOD
+;
+"#).unwrap(), Value::from(vec![
+    (Key::from("s1"), Value::from("some\ntext")),
+    (Key::from("s2"), Value::from(""))
+]));
     }
 
     #[test]

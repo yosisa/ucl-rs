@@ -37,7 +37,7 @@ jsonKeyValue -> (String, Value)
     = k:doubleQuotedString ws* ":" ws* v:jsonValue { (k, v) }
 
 pub jsonValue -> Value
-    = jsonArray / jsonObject / rawNumber / float / boolean / null / string
+    = jsonArray / jsonObject / rawNumber / float / boolean / null / s:doubleQuotedString { Value::from(s) }
 
 pub jsonArray -> Value
     = "[" vals:jsonArrayItem ** "," "]" { Value::from(vals) }
@@ -52,7 +52,7 @@ jsonObjectItem -> (String, Value)
     = wsnl* kv:jsonKeyValue wsnl* { kv }
 
 string -> Value
-    = s:(doubleQuotedString / rawString) { Value::from(s) }
+    = s:(doubleQuotedString / multiLineString / rawString) { Value::from(s) }
 
 number -> Value
     = binaryPrefixedNumber / siPrefixedNumber / rawNumber
@@ -146,6 +146,55 @@ escapeSequence -> char
             't' => '\t',
             x => x
         }
+    }
+
+pub multiLineString -> String
+    = emptyMultiLineString
+    / openMultiLine eol first:multiLineFirst s:multiLineInner* closeMultiLine {
+        s.into_iter().fold(String::from(first), |s, line| s + line)
+    }
+
+emptyMultiLineString -> String
+    = openMultiLine closeMultiLine { String::new() }
+
+openMultiLine = "<<" s:$([A-Z]+) {
+    TERMINATOR.with(|v| {
+        *v.borrow_mut() = Some(s.to_owned());
+    });
+}
+
+closeMultiLine = eol s:$([A-Z]+) eol {?
+    TERMINATOR.with(|v| {
+        match *v.borrow() {
+            Some(ref terminator) => {
+                if s.trim() != terminator {
+                    return Err("unmatching terminator");
+                }
+            },
+            _ => unreachable!(),
+        }
+        v.borrow_mut().take();
+        Ok(())
+    })
+}
+
+multiLineFirst -> &'input str
+    = s:$((!eol .)*) { s }
+
+multiLineInner -> &'input str
+    = s:$(eol (!eol .)*) {?
+        TERMINATOR.with(|v| {
+            match *v.borrow() {
+                Some(ref terminator) => {
+                    if s.trim_left() == terminator {
+                        Err("match terminator")
+                    } else {
+                        Ok(s)
+                    }
+                },
+                _ => unreachable!(),
+            }
+        })
     }
 
 comment = singleLineComment / multiLineComment

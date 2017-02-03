@@ -462,24 +462,31 @@ mod tests {
     #[test]
     fn test_ucl_value() {
         assert_eq!(ucl::value("10").unwrap(), Value::from(10));
+        assert_eq!(ucl::value("-10").unwrap(), Value::from(-10));
         assert_eq!(ucl::value("0x1f").unwrap(), Value::from(31));
         assert_eq!(ucl::value("0xFE").unwrap(), Value::from(254));
+
+        assert_eq!(ucl::value("1.23").unwrap(), Value::from(1.23_f64));
+        assert_eq!(ucl::value("-1.23").unwrap(), Value::from(-1.23_f64));
+
+        assert_eq!(ucl::value("1k").unwrap(), Value::from(1000));
+        assert_eq!(ucl::value("1kb").unwrap(), Value::from(1024));
+        assert_eq!(ucl::value("10ms").unwrap(), Value::from(0.01));
+        assert_eq!(ucl::value("1.2min").unwrap(), Value::from(72_f64));
+
+        assert_eq!(ucl::value("true").unwrap(), Value::from(true));
+        assert_eq!(ucl::value("false").unwrap(), Value::from(false));
+
+        assert_eq!(ucl::value("null").unwrap(), Value::Null);
+
+        assert_eq!(ucl::value("foo").unwrap(), Value::from("foo"));
+        assert_eq!(ucl::value(r#""foo""#).unwrap(), Value::from("foo"));
     }
 
     #[test]
     fn it_works() {
         assert_eq!(ucl::key("foo").unwrap(), "foo".to_owned());
         assert_eq!(ucl::key(r#""foo""#).unwrap(), "foo".to_owned());
-
-        assert_eq!(ucl::value("foo").unwrap(), Value::from("foo"));
-        assert_eq!(ucl::value(r#""foo""#).unwrap(), Value::from("foo"));
-        assert_eq!(ucl::value("100").unwrap(), Value::from(100));
-        assert_eq!(ucl::value("1k").unwrap(), Value::from(1000));
-        assert_eq!(ucl::value("1kb").unwrap(), Value::from(1024));
-        assert_eq!(ucl::value("10ms").unwrap(), Value::from(0.01));
-        assert_eq!(ucl::value("true").unwrap(), Value::from(true));
-        assert_eq!(ucl::value("false").unwrap(), Value::from(false));
-        assert_eq!(ucl::value("null").unwrap(), Value::Null);
 
         assert_eq!(ucl::keyValue("param = value;").unwrap(), (Key::from("param"), Value::from("value")));
         assert_eq!(ucl::keyValue(r#"section {

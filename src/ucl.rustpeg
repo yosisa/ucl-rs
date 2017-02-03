@@ -112,13 +112,13 @@ int -> i64
     = hexadecimal / decimal
 
 decimal -> i64
-    = n:$(digit+) !"." { n.parse().unwrap() }
+    = n:$("-"? digit+) !"." { n.parse().unwrap() }
 
 hexadecimal -> i64
     = "0x" n:$([0-9a-fA-F]+) !"." { i64::from_str_radix(n, 16).unwrap() }
 
 decimalFraction -> f64
-    = n:$(digit+("." digit+)?) { n.parse().unwrap() }
+    = n:$("-"? digit+("." digit+)?) { n.parse().unwrap() }
 
 word -> &'input str
     = s:$([a-zA-Z_][a-zA-Z0-9_]*) { s }

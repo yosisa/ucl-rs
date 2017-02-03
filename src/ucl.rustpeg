@@ -81,10 +81,10 @@ binaryPrefixedNumber -> Value
     }
 
 float -> Value
-    = n:decimal &delim { Value::from(n) }
+    = n:decimalFraction &delim { Value::from(n) }
 
 time -> Value
-    = n:decimal unit:$("ms" / "s" / "min" / "d" / "w" / "y") &delim {
+    = n:decimalFraction unit:$("ms" / "s" / "min" / "d" / "w" / "y") &delim {
         Value::from(match unit {
             "ms" => n / 1000f64,
             "s" => n,
@@ -109,9 +109,15 @@ null -> Value
     = "null" &delim { Value::Null }
 
 int -> i64
+    = hexadecimal / decimal
+
+decimal -> i64
     = n:$(digit+) !"." { n.parse().unwrap() }
 
-decimal -> f64
+hexadecimal -> i64
+    = "0x" n:$([0-9a-fA-F]+) !"." { i64::from_str_radix(n, 16).unwrap() }
+
+decimalFraction -> f64
     = n:$(digit+("." digit+)?) { n.parse().unwrap() }
 
 word -> &'input str

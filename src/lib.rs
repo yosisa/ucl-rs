@@ -460,6 +460,13 @@ mod tests {
     }
 
     #[test]
+    fn test_ucl_value() {
+        assert_eq!(ucl::value("10").unwrap(), Value::from(10));
+        assert_eq!(ucl::value("0x1f").unwrap(), Value::from(31));
+        assert_eq!(ucl::value("0xFE").unwrap(), Value::from(254));
+    }
+
+    #[test]
     fn it_works() {
         assert_eq!(ucl::key("foo").unwrap(), "foo".to_owned());
         assert_eq!(ucl::key(r#""foo""#).unwrap(), "foo".to_owned());

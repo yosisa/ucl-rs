@@ -466,13 +466,36 @@ mod tests {
         assert_eq!(ucl::value("0x1f").unwrap(), Value::from(31));
         assert_eq!(ucl::value("0xFE").unwrap(), Value::from(254));
 
-        assert_eq!(ucl::value("1.23").unwrap(), Value::from(1.23_f64));
-        assert_eq!(ucl::value("-1.23").unwrap(), Value::from(-1.23_f64));
+        assert_eq!(ucl::value("1.23").unwrap(), Value::from(1.23));
+        assert_eq!(ucl::value("-1.23").unwrap(), Value::from(-1.23));
+        assert_eq!(ucl::value(".12").unwrap(), Value::from(0.12));
+        assert_eq!(ucl::value("-0.12").unwrap(), Value::from(-0.12));
 
-        assert_eq!(ucl::value("1k").unwrap(), Value::from(1000));
+        assert_eq!(ucl::value("1k").unwrap(), Value::from(1_000));
+        assert_eq!(ucl::value("1K").unwrap(), Value::from(1_000));
+        assert_eq!(ucl::value("1m").unwrap(), Value::from(1_000_000));
+        assert_eq!(ucl::value("1M").unwrap(), Value::from(1_000_000));
+        assert_eq!(ucl::value("1g").unwrap(), Value::from(1_000_000_000));
+        assert_eq!(ucl::value("1G").unwrap(), Value::from(1_000_000_000));
+
         assert_eq!(ucl::value("1kb").unwrap(), Value::from(1024));
-        assert_eq!(ucl::value("10ms").unwrap(), Value::from(0.01));
+        assert_eq!(ucl::value("1Kb").unwrap(), Value::from(1024));
+        assert_eq!(ucl::value("1mb").unwrap(), Value::from(1024 * 1024));
+        assert_eq!(ucl::value("1Mb").unwrap(), Value::from(1024 * 1024));
+        assert_eq!(ucl::value("1gb").unwrap(), Value::from(1024 * 1024 * 1024));
+        assert_eq!(ucl::value("1Gb").unwrap(), Value::from(1024 * 1024 * 1024));
+
+        assert_eq!(ucl::value("1ms").unwrap(), Value::from(0.001));
+        assert_eq!(ucl::value("1.2ms").unwrap(), Value::from(0.0012));
+        assert_eq!(ucl::value(".1s").unwrap(), Value::from(0.1));
+        assert_eq!(ucl::value("-10ms").unwrap(), Value::from(-0.01));
+
+        assert_eq!(ucl::value("1min").unwrap(), Value::from(60_f64));
         assert_eq!(ucl::value("1.2min").unwrap(), Value::from(72_f64));
+
+        assert_eq!(ucl::value("1d").unwrap(), Value::from((24 * 60 * 60) as f64));
+        assert_eq!(ucl::value("1w").unwrap(), Value::from((7 * 24 * 60 * 60) as f64));
+        assert_eq!(ucl::value("1y").unwrap(), Value::from((365 * 24 * 60 * 60) as f64));
 
         assert_eq!(ucl::value("true").unwrap(), Value::from(true));
         assert_eq!(ucl::value("false").unwrap(), Value::from(false));

@@ -84,16 +84,20 @@ float -> Value
     = n:decimalFraction &delim { Value::from(n) }
 
 time -> Value
-    = n:decimalFraction unit:$("ms" / "s" / "min" / "d" / "w" / "y") &delim {
-        Value::from(match unit {
-            "ms" => n / 1000f64,
-            "s" => n,
-            "min" => n * 60f64,
-            "d" => n * 86_400f64,
-            "w" => n * 604_800f64,
-            "y" => n * 31_536_000f64,
-            _ => panic!()
-        })
+    = n:decimal unit:timeUnit &delim { Value::from(n as f64 * unit )}
+    / n:decimalFraction unit:timeUnit &delim { Value::from(n * unit) }
+
+timeUnit -> f64
+    = unit:$("ms" / "s" / "min" / "d" / "w" / "y") {
+        match unit {
+            "ms" => 0.001,
+            "s" => 1_f64,
+            "min" => 60_f64,
+            "d" => 86_400_f64,
+            "w" => 604_800_f64,
+            "y" => 31_536_000_f64,
+            _ => unreachable!()
+        }
     }
 
 boolean -> Value
@@ -118,7 +122,7 @@ hexadecimal -> i64
     = "0x" n:$([0-9a-fA-F]+) !"." { i64::from_str_radix(n, 16).unwrap() }
 
 decimalFraction -> f64
-    = n:$("-"? digit+("." digit+)?) { n.parse().unwrap() }
+    = n:$(("-"? digit+)? "." digit+) { n.parse().unwrap() }
 
 word -> &'input str
     = s:$([a-zA-Z_][a-zA-Z0-9_]*) { s }
